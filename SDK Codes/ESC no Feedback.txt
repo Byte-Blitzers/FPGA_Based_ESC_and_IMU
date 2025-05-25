@@ -1,0 +1,84 @@
+#include "xgpio.h"
+#include "xstatus.h"
+#include "xil_printf.h"
+#include "sleep.h"
+
+#define GPIO_UH_DEVICE_ID  XPAR_AXI_GPIO_0_DEVICE_ID  // High side U
+#define GPIO_UL_DEVICE_ID  XPAR_AXI_GPIO_1_DEVICE_ID  // Low side U
+#define GPIO_VH_DEVICE_ID  XPAR_AXI_GPIO_2_DEVICE_ID  // High side V
+#define GPIO_VL_DEVICE_ID  XPAR_AXI_GPIO_3_DEVICE_ID  // Low side V
+#define GPIO_WH_DEVICE_ID  XPAR_AXI_GPIO_4_DEVICE_ID  // High side W
+#define GPIO_WL_DEVICE_ID  XPAR_AXI_GPIO_5_DEVICE_ID  // Low side W
+
+XGpio GpioUH, GpioUL, GpioVH, GpioVL, GpioWH, GpioWL;
+
+// 6-step commutation table (1 = HIGH, 0 = LOW)
+// Format: {UH, UL, VH, VL, WH, WL}
+const u8 commutationTable[6][6] = {
+    {1, 0, 1, 0, 0, 1},  // Step 1: U+ W-
+    {1, 0, 0, 1, 1, 0},  // Step 2: U+ V-
+    {0, 1, 1, 0, 1, 0},  // Step 3: V+ U-
+    {0, 1, 1, 0, 0, 1},  // Step 4: V+ W-
+    {1, 0, 0, 1, 0, 1},  // Step 5: W+ U-
+    {0, 1, 0, 1, 1, 0}   // Step 6: W+ V-
+};
+
+// Function to set GPIOs according to the commutation step
+void SetCommutationStep(int step) {
+    xil_printf("Commutation Step: %d\n", step + 1);
+
+    XGpio_DiscreteWrite(&GpioUH, 1, commutationTable[step][0]);
+    XGpio_DiscreteWrite(&GpioUL, 1, commutationTable[step][1]);
+    XGpio_DiscreteWrite(&GpioVH, 1, commutationTable[step][2]);
+    XGpio_DiscreteWrite(&GpioVL, 1, commutationTable[step][3]);
+    XGpio_DiscreteWrite(&GpioWH, 1, commutationTable[step][4]);
+    XGpio_DiscreteWrite(&GpioWL, 1, commutationTable[step][5]);
+
+    xil_printf("UH: %d, UL: %d, VH: %d, VL: %d, WH: %d, WL: %d\n",
+               commutationTable[step][0], commutationTable[step][1],
+               commutationTable[step][2], commutationTable[step][3],
+               commutationTable[step][4], commutationTable[step][5]);
+}
+
+int main() {
+    int Status;
+    int step = 0;
+
+    // Initialize GPIO instances
+    Status = XGpio_Initialize(&GpioUH, GPIO_UH_DEVICE_ID);
+    if (Status != XST_SUCCESS) return XST_FAILURE;
+
+    Status = XGpio_Initialize(&GpioUL, GPIO_UL_DEVICE_ID);
+    if (Status != XST_SUCCESS) return XST_FAILURE;
+
+    Status = XGpio_Initialize(&GpioVH, GPIO_VH_DEVICE_ID);
+    if (Status != XST_SUCCESS) return XST_FAILURE;
+
+    Status = XGpio_Initialize(&GpioVL, GPIO_VL_DEVICE_ID);
+    if (Status != XST_SUCCESS) return XST_FAILURE;
+
+    Status = XGpio_Initialize(&GpioWH, GPIO_WH_DEVICE_ID);
+    if (Status != XST_SUCCESS) return XST_FAILURE;
+
+    Status = XGpio_Initialize(&GpioWL, GPIO_WL_DEVICE_ID);
+    if (Status != XST_SUCCESS) return XST_FAILURE;
+
+    // Set GPIO directions as output (0 = Output)
+    XGpio_SetDataDirection(&GpioUH, 1, 0);
+    XGpio_SetDataDirection(&GpioUL, 1, 0);
+    XGpio_SetDataDirection(&GpioVH, 1, 0);
+    XGpio_SetDataDirection(&GpioVL, 1, 0);
+    XGpio_SetDataDirection(&GpioWH, 1, 0);
+    XGpio_SetDataDirection(&GpioWL, 1, 0);
+
+    xil_printf("BLDC Motor Commutation Started\n");
+
+    while (1) {
+        SetCommutationStep(step);
+
+        step = (step + 1) % 6;  // Cycle through steps
+        usleep(5000000);  // 500 ms delay (Adjust for speed control)
+    }
+
+    return XST_SUCCESS;
+}
