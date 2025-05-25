@@ -11,7 +11,7 @@ FPGA_Based_ESC_and_IMU/
 ├── Architectures and Flow Charts/   # System diagrams and flowcharts
 ├── Constraints FIle/                # FPGA hardware constraints (pin mapping, timing)
 ├── Docmentation/                    # Project documentation and design explanation
-├── SDK Codes/                       # Software (likely C) for controlling FPGA/IMU
+├── SDK Codes/                       # Software for controlling FPGA/IMU
 ├── TCL Script/                      # Scripts for project setup and build automation
 └── README.md                        # Project description
 ```
@@ -29,12 +29,12 @@ FPGA_Based_ESC_and_IMU/
 
 ## 🧰 Tools & Technologies
 
-* **HDL (likely VHDL/Verilog)** for hardware design
+* **HDL (Verilog)** for hardware design
 * **Tcl** for scripting FPGA toolchain processes
 * **C** for SDK-based software interaction
-* **Vivado/Quartus** (presumed) for FPGA development
-* **FPGA Development Board** (e.g., Xilinx or Intel/Altera based)
-* **IMU Sensor Module** (e.g., MPU6050 or similar)
+* **Vivado** for FPGA development
+* **FPGA Development Board** Zybo (Legacy)
+* **IMU Sensor Module** (MPU6050, BMP280 & HMC5883L)
 
 ---
 
@@ -45,7 +45,7 @@ FPGA_Based_ESC_and_IMU/
    ```bash
    git clone https://github.com/shardulbhave/FPGA_Based_ESC_and_IMU.git
    ```
-2. Open the project in your FPGA IDE (Vivado or Quartus).
+2. Open the project in your FPGA IDE Vivado .
 3. Review and apply the constraint files under `Constraints FIle/`.
 4. Use the `TCL Script/` to set up the build environment.
 5. Upload the bitstream to your FPGA.
