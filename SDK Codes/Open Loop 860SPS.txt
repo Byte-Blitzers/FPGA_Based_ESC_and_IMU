@@ -1,0 +1,117 @@
+#include "xparameters.h"
+#include "xgpio.h"
+#include "xiic.h"
+#include "xil_printf.h"
+#include "sleep.h"
+
+#define GPIO_UH_DEVICE_ID  XPAR_GPIO_0_DEVICE_ID
+#define GPIO_UL_DEVICE_ID  XPAR_GPIO_1_DEVICE_ID
+#define GPIO_VH_DEVICE_ID  XPAR_GPIO_2_DEVICE_ID
+#define GPIO_VL_DEVICE_ID  XPAR_GPIO_3_DEVICE_ID
+#define GPIO_WH_DEVICE_ID  XPAR_GPIO_4_DEVICE_ID
+#define GPIO_WL_DEVICE_ID  XPAR_GPIO_5_DEVICE_ID
+
+#define IIC_DEVICE_ID      XPAR_IIC_0_DEVICE_ID
+#define ADS1115_ADDR       0x48
+
+XIic Iic;
+XGpio GpioUH, GpioUL, GpioVH, GpioVL, GpioWH, GpioWL;
+
+const u8 commutationTable[6][6] = {
+    {1, 0, 1, 0, 0, 1},
+    {1, 0, 0, 1, 1, 0},
+    {0, 1, 1, 0, 1, 0},
+    {0, 1, 1, 0, 0, 1},
+    {1, 0, 0, 1, 0, 1},
+    {0, 1, 0, 1, 1, 0}
+};
+
+void SetCommutationStep(int step) {
+    XGpio_DiscreteWrite(&GpioUH, 1, commutationTable[step][0]);
+    XGpio_DiscreteWrite(&GpioUL, 1, commutationTable[step][1]);
+    XGpio_DiscreteWrite(&GpioVH, 1, commutationTable[step][2]);
+    XGpio_DiscreteWrite(&GpioVL, 1, commutationTable[step][3]);
+    XGpio_DiscreteWrite(&GpioWH, 1, commutationTable[step][4]);
+    XGpio_DiscreteWrite(&GpioWL, 1, commutationTable[step][5]);
+}
+
+s16 ReadADS1115(u8 channel) {
+    u8 config[3];
+    u8 readBuf[2];
+    u16 configVal = 0;
+
+    // OS = 1, MUX = AINx, PGA = ±2.048V, MODE = single-shot, DR = 860SPS
+    switch (channel) {
+        case 0: configVal = 0xC5E3; break;
+        case 1: configVal = 0xD5E3; break;
+        case 2: configVal = 0xE5E3; break;
+        case 3: configVal = 0xF5E3; break;
+        default: return 0;
+    }
+
+    config[0] = 0x01;                         // config register
+    config[1] = (configVal >> 8) & 0xFF;
+    config[2] = configVal & 0xFF;
+
+    XIic_Start(&Iic);
+    XIic_Send(Iic.BaseAddress, ADS1115_ADDR, config, 3, XIIC_STOP);
+    usleep(1200);  // 1.2 ms wait for 860 SPS conversion
+
+    config[0] = 0x00;                         // point to conversion register
+    XIic_Send(Iic.BaseAddress, ADS1115_ADDR, config, 1, XIIC_STOP);
+    usleep(1200);
+    XIic_Recv(Iic.BaseAddress, ADS1115_ADDR, readBuf, 2, XIIC_STOP);
+    XIic_Stop(&Iic);
+
+    return (readBuf[0] << 8) | readBuf[1];
+}
+
+int main() {
+    int step = 0;
+
+    // Initialize all GPIOs
+    XGpio_Initialize(&GpioUH, GPIO_UH_DEVICE_ID);
+    XGpio_Initialize(&GpioUL, GPIO_UL_DEVICE_ID);
+    XGpio_Initialize(&GpioVH, GPIO_VH_DEVICE_ID);
+    XGpio_Initialize(&GpioVL, GPIO_VL_DEVICE_ID);
+    XGpio_Initialize(&GpioWH, GPIO_WH_DEVICE_ID);
+    XGpio_Initialize(&GpioWL, GPIO_WL_DEVICE_ID);
+
+    XGpio_SetDataDirection(&GpioUH, 1, 0);
+    XGpio_SetDataDirection(&GpioUL, 1, 0);
+    XGpio_SetDataDirection(&GpioVH, 1, 0);
+    XGpio_SetDataDirection(&GpioVL, 1, 0);
+    XGpio_SetDataDirection(&GpioWH, 1, 0);
+    XGpio_SetDataDirection(&GpioWL, 1, 0);
+
+    // Initialize IIC
+    XIic_Config *IicConfig = XIic_LookupConfig(IIC_DEVICE_ID);
+    XIic_CfgInitialize(&Iic, IicConfig, IicConfig->BaseAddress);
+    XIic_SetAddress(&Iic, XII_ADDR_TO_SEND_TYPE, ADS1115_ADDR);
+
+    xil_printf("MicroBlaze: Open-loop BLDC with ADS1115 at 860 SPS...\n");
+
+    while (1) {
+        SetCommutationStep(step);
+
+        s16 A0 = ReadADS1115(0);
+        s16 A1 = ReadADS1115(1);
+        s16 A2 = ReadADS1115(2);
+        s16 A3 = ReadADS1115(3);
+
+        s16 phase_voltage_A = A0 - A3;
+        s16 phase_voltage_B = A1 - A3;
+        s16 phase_voltage_C = A2 - A3;
+
+        s16 virtual_neutral = (A0 + A1 + A2) / 3;
+
+        xil_printf("\n Step %d | A0: %d  A1: %d  A2: %d A3: %d \n|", step, A0, A1, A2, A3);
+        xil_printf("phase_voltage_A:%d  phase_voltage_B:%d  phase_voltage_C:%d \n",phase_voltage_A,phase_voltage_B,phase_voltage_C);
+        xil_printf("virtual_neutral: %d", virtual_neutral);
+
+        step = (step + 1) % 6;
+        usleep(1000); // ~100 Hz commutation rate (adjustable)
+    }
+
+    return 0;
+}
